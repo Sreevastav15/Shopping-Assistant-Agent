@@ -1,0 +1,4 @@
+sqlalchemy
+psycopg[binary]
+alembic
+langchain["google-genai"]
