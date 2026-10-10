@@ -1,7 +1,6 @@
-from sqlalchemy.orm import Session
 from sqlalchemy import select, or_
 from database import models
-from database.database import get_db, SessionLocal
+from database.database import SessionLocal
 from typing import Optional
 from langchain.tools import tool
 
