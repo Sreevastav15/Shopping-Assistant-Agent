@@ -10,7 +10,7 @@ def search_products(keywords: list[str], max_price: Optional[float] = None, is_o
     Search for products from database based on a given query, max_price and is_organic
 
     Args:
-        query(list[str]): List of keywords to search for a product.
+        keywords(list[str]):list of search terms. Returns products matching ANY of the keywords. Pass all terms in a single call.t.
         max_price(Optional[float]): The maximum price for a product.
         is_organic(Optional[int]): Whether to filter organic products or not.
     
@@ -56,3 +56,23 @@ def search_products(keywords: list[str], max_price: Optional[float] = None, is_o
             }
             for product in products
         ]
+
+@tool
+def get_categories() -> list[str]:
+    """
+    Returns a list of unique categories of products available.
+
+    Args:
+        None
+    Returns:
+        list[str]: A list of all unique categories
+    """
+    
+    with SessionLocal() as db:
+        categories = db.scalars(
+            select(models.Products.category)
+            .distinct()
+            .order_by(models.Products.category)
+        ).all()
+
+    return [str(category) for category in categories]
