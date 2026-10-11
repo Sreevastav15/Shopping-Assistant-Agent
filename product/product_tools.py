@@ -58,6 +58,35 @@ def search_products(keywords: list[str], max_price: Optional[float] = None, is_o
         ]
 
 @tool
+def search_product_id(ids: list[int]) -> list[dict]:
+    """
+    Get details of products by id.
+
+    Args:
+        ids(list[int]): List of products ids to search.
+    Returns:
+        list[dict]: List of all related products
+    """
+
+    with SessionLocal() as db:
+        products = db.scalars(
+            select(
+                models.Products
+            )
+            .where(models.Products.id.in_(ids))
+        ).all()
+
+    return[
+        {
+            'id': product.id,
+            'name': product.name,
+            'category': product.category,
+            'price': product.price,
+            'description': product.description
+        } for product in products
+    ]
+
+@tool
 def get_categories() -> list[str]:
     """
     Returns a list of unique categories of products available.
