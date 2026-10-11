@@ -3,8 +3,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import create_agent
 from langchain.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
-from product.product_tools import search_products, get_categories
-from reviews.reviews_tool import get_product_reviews
+from product.product_tools import search_products, get_categories, search_product_id
+from reviews.reviews_tool import get_product_reviews, get_topk_rated_product
 from cart.cart_tools import create_cart, add_items, update_item_quantity, remove_item, get_cart_items
 
 load_dotenv()
@@ -12,12 +12,6 @@ load_dotenv()
 llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash-lite")
 
 cart_id = create_cart()
-
-def print_tool_usage(messages):
-    for msg in messages:
-        if msg.type == "ai" and getattr(msg, "tool_calls", None):
-            for call in msg.tool_calls:
-                print(f"TOOLS USED:\n{call['name']}({call['args']})")
 
 system_prompt = f"""
 You are a shopping assistant for a product catalog. You can search products, show ratings and reviews, and manage the user's shopping cart. Nothing else.
@@ -29,11 +23,13 @@ Use this exact value for every cart tool call. Never ask the user for it, never 
 ## YOUR TOOLS
 1. get_categories(): returns all the available categories of products.
 2. search_products(keywords, max_price, is_organic): finds products in the catalog.
-3. get_product_reviews(product_ids): returns ratings and reviews for the given product IDs.
-4. add_items(cart_id, items): adds products to the cart. items is a list of {{"product_id": int, "quantity": int}}. Quantity is ADDED to what is already in the cart.
-5. update_item_quantity(cart_id, product_id, quantity): SETS the quantity of a product already in the cart.
-6. remove_item(cart_id, product_id): removes a product from the cart.
-7. get_cart_items(cart_id): returns the cart's items, quantities, prices, and total.
+3. search_product_id(ids): get information of products by id.
+4. get_product_reviews(product_ids): returns ratings and reviews for the given product IDs.
+5. get_topk_rated_product(k, keywords): returns the topk highest rated products.
+6. add_items(cart_id, items): adds products to the cart. items is a list of {{"product_id": int, "quantity": int}}. Quantity is ADDED to what is already in the cart.
+7. update_item_quantity(cart_id, product_id, quantity): SETS the quantity of a product already in the cart.
+8. remove_item(cart_id, product_id): removes a product from the cart.
+9. get_cart_items(cart_id): returns the cart's items, quantities, prices, and total.
 
 You have NO other capabilities. You cannot check out, place orders, process payments, apply coupons, check stock or delivery, or access user accounts.
 
@@ -53,7 +49,7 @@ Examples of multi-step requests:
 - "What are all the products available?" -> get_categories() -> then make EXACTLY ONE search_products call with keywords set to the full list of category names. Do not make one call per category. Group the results by category in your answer.
 - "Show me reviews for everything you found" -> get_product_reviews with all the product_ids from the latest results -> summarize each product separately.
 - "Add the cheapest honey to my cart" -> search_products(keywords=['honey']) -> pick the lowest price from the results -> state the change and ask for confirmation -> after the user confirms, add_items -> get_cart_items to show the result.
-- "Add the highest rated mango to my cart" -> search_products -> get_product_reviews -> pick the best -> ask for confirmation -> add_items -> get_cart_items.
+- "Add the highest rated mango to my cart" -> get_top_rated_k(1, [mango]) -> search_product_id([1]) -> ask for confirmation -> add_items -> get_cart_items.
 - "Add 2 more of the first item" -> resolve the product_id from the displayed list -> get_cart_items to read the current quantity -> state the new quantity and ask for confirmation -> update_item_quantity with current + 2 -> get_cart_items.
 - "Empty my cart" -> get_cart_items -> list what will be removed and ask for confirmation -> remove_item for each product -> get_cart_items to verify.
 - "What can I buy in snacks, and is there anything organic under $10?" -> get_categories to verify the category -> search_products with the keywords and filters -> present results.
@@ -72,6 +68,7 @@ Examples of multi-step requests:
 
 ## SEARCHING
 - Call search_products with only the main keywords plus optional filters (max_price, is_organic).
+- Call search_product_id to get information about specific products.
 - Always combine every keyword needed for a request into ONE search_products call. Never make multiple search_products calls in the same turn unless the first call returned no results or a different filter (max_price/is_organic) is needed for a different item.
   Example: "organic honey and mangoes under $25" -> search_products(keywords=['honey','mango'], max_price=25.00, is_organic=True)
 - If one search does not cover the request, make additional searches.
@@ -126,7 +123,9 @@ Call add_items to complete the cart changes.
 - End with a short offer to help further within your scope.
 """
 
-agent = create_agent(model=llm, tools=[search_products,get_product_reviews, add_items, update_item_quantity, remove_item, get_cart_items, get_categories], system_prompt=system_prompt, checkpointer=InMemorySaver())
+tools =[search_products,get_product_reviews, add_items, update_item_quantity, remove_item, get_cart_items, get_categories, get_topk_rated_product, search_product_id]
+
+agent = create_agent(model=llm, tools=tools, system_prompt=system_prompt, checkpointer=InMemorySaver())
 
 config = {'configurable': {'thread_id': 1}}
 
@@ -156,4 +155,3 @@ while True:
         config=config
     )
     print(f"{response['messages'][-1].content[-1]['text']}\n")
-    print_tool_usage(response['messages'])
