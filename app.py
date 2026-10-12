@@ -47,13 +47,6 @@ if "agent" not in st.session_state:
 
 # ---------- sidebar ----------
 with st.sidebar:
-    st.header("🛍️ Categories")
-    try:
-        for category in load_categories():
-            st.markdown(f"- {category}")
-    except Exception as e:
-        st.caption(f"Could not load categories: {e}")
-
     st.divider()
     st.header("🛒 Your Cart")
 
@@ -104,16 +97,26 @@ if prompt := st.chat_input("What would you like to search for today?"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            try:
-                response = st.session_state.agent.invoke(
-                    {"messages": [{"role": "user", "content": prompt}]},
-                    config={"configurable": {"thread_id": st.session_state.thread_id}},
-                )
-                answer = extract_text(response["messages"][-1])
-            except Exception as e:
-                answer = f"⚠️ Something went wrong: `{e}`"
-        st.markdown(answer)
+        
+        try:
+            spinner_placeholder = st.empty()
+            spinner_placeholder.markdown("⏳ Thinking...")
+            response = st.session_state.agent.stream_events(
+                {"messages": [{"role": "user", "content": prompt}]},
+                config={"configurable": {"thread_id": st.session_state.thread_id}},
+                version = 'v3'
+            )
+            answer = ""
+            message_placeholder = st.empty()
+            for kind, item in response.interleave('messages'):
+                if kind == "messages":
+                    for token in item.text:
+                        spinner_placeholder.empty()
+                        answer += token
+                        message_placeholder.markdown(answer)
+            message_placeholder.markdown(answer)
+        except Exception as e:
+            st.error(f"⚠️ Something went wrong: {e}")
 
     st.session_state.messages.append({"role": "assistant", "content": answer})
     # Cart may have changed – rerun so the sidebar cart refreshes.
